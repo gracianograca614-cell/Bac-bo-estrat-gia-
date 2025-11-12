@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Cassino Graciano V2</title>
+<style>
+  :root{--bg:#0e0e10;--panel:#151617;--muted:#9aa0a6;--accent:#e03b3b;--accent2:#2aa65b}
+  html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Arial,Helvetica,sans-serif;background:linear-gradient(180deg,#07111a 0,#0e0e10 100%);color:#fff}
+  .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{width:100%;max-width:420px;background:var(--panel);border-radius:12px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+  h1{margin:0 0 10px;font-size:20px;letter-spacing:.5px}
+  .row{display:flex;gap:8px;margin-top:10px;align-items:center}
+  .big{font-size:18px;font-weight:600}
+  .out{background:#0b0b0c;padding:12px;border-radius:8px;text-align:center;margin-top:12px}
+  button{background:#222;border:0;color:#fff;padding:10px 12px;border-radius:8px;cursor:pointer}
+  button.primary{background:var(--accent)}
+  button.green{background:var(--accent2)}
+  button:active{transform:translateY(1px)}
+  .small{font-size:13px;color:var(--muted);margin-top:8px}
+  label{font-size:13px;color:var(--muted)}
+  input[type="number"], select{padding:8px;border-radius:8px;border:1px solid #2a2a2a;background:#0b0b0c;color:#fff;width:100%}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  pre{white-space:pre-wrap;word-break:break-word;background:#080808;padding:10px;border-radius:8px;margin-top:10px;color:#ddd}
+  .footer{font-size:12px;color:var(--muted);text-align:center;margin-top:12px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>🔴 Cassino Graciano V2 — Mini Cassino Bac Bo</h1>
+
+      <div class="out">
+        <div id="next" class="big">Clique em "Rodada" para começar</div>
+        <div class="small" id="status">Saldo: <span id="saldoDisplay">—</span></div>
+      </div>
+
+      <div class="row">
+        <label style="flex:1">
+          Aposta base:
+          <input id="apostaBase" type="number" min="1" value="10">
+        </label>
+        <label style="width:120px">
+          Escolha:
+          <select id="escolha">
+            <option value="vermelho">Vermelho</option>
+            <option value="azul">Azul</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="grid">
+        <button id="rodadaBtn" class="primary">Rodada</button>
+        <button id="simularBtn" class="green">Simular 100</button>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <button id="resetBtn">Resetar</button>
+        <button id="exportBtn">Exportar histórico</button>
+      </div>
+
+      <div class="small" style="margin-top:12px">
+        <strong>Últimas 15 rodadas:</strong>
+        <pre id="hist">—</pre>
+      </div>
+
+      <div class="small" id="contadores">Vitórias: 0 — Perdas: 0</div>
+
+      <div class="footer">Graciano • Mini Cassino — dados salvos no seu navegador</div>
+    </div>
+  </div>
+
+<script>
+/*
+  Mini Cassino Graciano V2
+  - Salva estado no localStorage
+  - Permite escolher cor, apostar base
+  - Aplica Martingale básico (dobra após perda)
+  - Mostra histórico de 15 rodadas, contadores e saldo
+*/
+
+const LS_KEY = 'cassino_graciano_v2_state_v1';
+
+let state = {
+  historico: [],
+  apostaBase: 10,
+  ultimaAposta: 10,
+  novaAposta: 10,
+  escolha: 'vermelho',
+  vitorias: 0,
+  perdas: 0,
+  saldo: 1000 // só para simulação; você pode ajustar
+};
+
+// carregar estado
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){
+      const s = JSON.parse(raw);
+      state = {...state, ...s};
+    }
+  }catch(e){ console.warn('Erro ao carregar estado', e) }
+  updateUI();
+}
+
+// salvar
+function saveState(){
+  localStorage.setItem(LS_KEY, JSON.stringify({
+    historico: state.historico,
+    apostaBase: state.apostaBase,
+    ultimaAposta: state.ultimaAposta,
+    novaAposta: state.novaAposta,
+    escolha: state.escolha,
+    vitorias: state.vitorias,
+    perdas: state.perdas,
+    saldo: state.saldo
+  }));
+  updateUI();
+}
+
+// gerar resultado aleatório
+function gerarResultado(){
+  const cores = ['vermelho','azul'];
+  return cores[Math.floor(Math.random()*2)];
+}
+
+// aplicar uma rodada (retorna objeto com info)
+function playRound(){
+  const resultado = gerarResultado();
+  state.historico.push(resultado);
+  if(state.historico.length > 15) state.historico.shift();
+
+  // decidir vitória: acertou a escolha?
+  const ganhou = (resultado === state.escolha);
+
+  if(ganhou){
+    state.vitorias += 1;
+    state.saldo += state.novaAposta; // ganho: +aposta (simplificado)
+    state.ultimaAposta = state.novaAposta;
+    state.novaAposta = state.apostaBase;
+  } else {
+    state.perdas += 1;
+    state.saldo -= state.novaAposta;
+    state.ultimaAposta = state.novaAposta;
+    state.novaAposta = Math.min(state.ultimaAposta * 2, 1000000); // limite alto
+  }
+
+  return {resultado, ganhou, novaAposta: state.novaAposta, saldo: state.saldo};
+}
+
+// atualizar UI
+function updateUI(){
+  document.getElementById('hist').textContent = state.historico.join(', ') || '—';
+  document.getElementById('contadores').textContent = `Vitórias: ${state.vitorias} — Perdas: ${state.perdas}`;
+  document.getElementById('saldoDisplay').textContent = state.saldo;
+  document.getElementById('apostaBase').value = state.apostaBase;
+  document.getElementById('escolha').value = state.escolha;
+  const nextEl = document.getElementById('next');
+  nextEl.innerHTML = `<strong>Próxima aposta: ${state.novaAposta}</strong> no <strong>${state.escolha}</strong>`;
+}
+
+// bind events
+document.getElementById('rodadaBtn').addEventListener('click', ()=>{
+  // atualizar parametros
+  const base = parseInt(document.getElementById('apostaBase').value) || 10;
+  state.apostaBase = base;
+  state.escolha = document.getElementById('escolha').value;
+  // jogar uma rodada
+  const r = playRound();
+  saveState();
+  alert(`Resultado: ${r.resultado.toUpperCase()}\n${r.ganhou? 'Ganhou!':'Perdeu.'}\nSaldo: ${r.saldo}`);
+});
+
+document.getElementById('simularBtn').addEventListener('click', ()=>{
+  const n = 100;
+  for(let i=0;i<n;i++){
+    state.escolha = document.getElementById('escolha').value;
+    state.apostaBase = parseInt(document.getElementById('apostaBase').value) || 10;
+    playRound();
+  }
+  saveState();
+  alert(`Simulação de 100 rodadas concluída.\nVitórias: ${state.vitorias} — Perdas: ${state.perdas}\nSaldo: ${state.saldo}`);
+});
+
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  if(!confirm('Tem certeza? Isto limpará histórico, contadores e saldo.')) return;
+  state = {
+    historico: [], apostaBase: 10, ultimaAposta: 10,
+    novaAposta: 10, escolha: 'vermelho', vitorias:0, perdas:0, saldo:1000
+  };
+  saveState();
+  updateUI();
+});
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'cassino_graciano_estado.json'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+// inicializar
+loadState();
+</script>
+</body>
+</html>
